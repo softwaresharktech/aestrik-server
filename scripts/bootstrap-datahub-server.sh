@@ -79,6 +79,10 @@ if [[ -f "$ENV_FILE" ]]; then
   while IFS='=' read -r key value; do
     key="$(trim "$key")"
     [[ -z "$key" || "$key" == \#* ]] && continue
+    # Strip a trailing inline comment (e.g. "1.2.3.4/32   # never 0.0.0.0/0") — none of the
+    # real values this file holds (IPs, hostnames, DB names, generated secrets) legitimately
+    # contain '#', so it's safe to treat everything from the first one as a comment.
+    value="${value%%#*}"
     value="$(trim "$value")"
     # Don't clobber a value already set in the environment (inline override wins).
     if [[ -z "${!key:-}" ]]; then
