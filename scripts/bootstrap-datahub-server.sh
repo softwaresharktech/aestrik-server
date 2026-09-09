@@ -56,12 +56,23 @@ fi
 # this is safe to combine with inline overrides. ENV_FILE lets you point at a different path.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/../.env.production}"
+trim() {
+  # Pure parameter-expansion trim — never re-parses the string as shell syntax, so quotes,
+  # apostrophes (e.g. a comment line containing "It's"), $, backticks etc. are all just
+  # literal characters. (xargs, used here previously, chokes on unmatched quote characters —
+  # including in the file's own prose comments, not just values.)
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
 if [[ -f "$ENV_FILE" ]]; then
   echo "Loading $ENV_FILE"
   while IFS='=' read -r key value; do
-    key="$(echo "$key" | xargs)"
+    key="$(trim "$key")"
     [[ -z "$key" || "$key" == \#* ]] && continue
-    value="$(echo "$value" | xargs)"
+    value="$(trim "$value")"
     # Don't clobber a value already set in the environment (inline override wins).
     if [[ -z "${!key:-}" ]]; then
       export "$key=$value"
