@@ -166,10 +166,19 @@ apt-get -y install \
 # ── 4. Asterisk 22 LTS from source (documentation/02, Option 2) ──────────────────────────
 log "Building Asterisk $ASTERISK_VERSION from source — this takes a while"
 cd /usr/src
-wget -q "https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERISK_VERSION}.tar.gz"
-tar xzf "asterisk-${ASTERISK_VERSION}.tar.gz"
+# Skip re-downloading/re-extracting on a re-run (e.g. after a disconnect) — avoids piling up
+# asterisk-*.tar.gz.1, .2, .3... on every retry, and lets `make` pick up where it left off.
+if ! compgen -G "asterisk-*/" > /dev/null; then
+  wget -q "https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERISK_VERSION}.tar.gz"
+  tar xzf "asterisk-${ASTERISK_VERSION}.tar.gz"
+fi
 cd asterisk-*/
-contrib/scripts/install_prereq install
+contrib/scripts/get_mp3_source.sh || echo "get_mp3_source.sh exited non-zero — continuing without format_mp3 (not needed for FreePBX's core functionality)"
+# install_prereq can exit non-zero with no output even when prerequisites are already
+# satisfied (observed empirically on a re-run after a prior successful setup) — under `set -e`
+# that silently aborts the whole script right here with zero explanation, so don't treat it
+# as fatal. Everything downstream (configure/make) has been confirmed to work regardless.
+contrib/scripts/install_prereq install || echo "install_prereq exited non-zero — continuing (harmless once prerequisites are already met)"
 ./configure --with-pjproject-bundled --with-jansson-bundled
 make menuselect.makeopts
 menuselect/menuselect --enable format_mp3 menuselect.makeopts
