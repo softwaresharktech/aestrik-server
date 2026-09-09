@@ -141,6 +141,13 @@ ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow from "$ADMIN_SSH_CIDR" to any port 22 proto tcp comment 'SSH - admin only'
+# FreePBX admin UI. Scoped to the admin IP for now, same as SSH — this was missing entirely
+# before (no rule for 80/443 at all), which silently blocked every browser, including the
+# admin's own. Note: issuing a Let's Encrypt cert via HTTP-01 later needs port 80 briefly
+# reachable from Let's Encrypt's own validation servers, not just ADMIN_SSH_CIDR — widen this
+# temporarily for that step, or switch to DNS-01 validation instead.
+ufw allow from "$ADMIN_SSH_CIDR" to any port 80 proto tcp comment 'FreePBX admin UI - admin only'
+ufw allow from "$ADMIN_SSH_CIDR" to any port 443 proto tcp comment 'FreePBX admin UI (TLS) - admin only'
 ufw allow from "$TRUNK_PROVIDER_CIDR" to any port 5060 proto udp comment 'SIP signaling'
 ufw allow 10000:20000/udp comment 'RTP media'
 ufw allow from "$ERP_BACKEND_IP" to any port 5038 proto tcp comment 'AMI - ERP backend only'
