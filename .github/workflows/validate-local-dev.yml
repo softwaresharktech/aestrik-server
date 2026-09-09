@@ -1,0 +1,27 @@
+name: Validate local-dev compose file
+
+# Lightweight PR check, unrelated to production deployment — catches YAML/compose errors in
+# the local FreePBX exploration environment (local-dev/) before they land on main and break
+# it for the next person who runs `docker compose up`.
+
+on:
+  pull_request:
+    paths:
+      - 'local-dev/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create placeholder secret files
+        working-directory: local-dev
+        run: |
+          printf "ci-placeholder" > mysql_root_password.txt
+          printf "ci-placeholder" > freepbxuser_password.txt
+          printf "[smtp.example.com]:587 placeholder@example.com:placeholder" > sasl_passwd.txt
+
+      - name: docker compose config
+        working-directory: local-dev
+        run: docker compose config -q

@@ -1,0 +1,44 @@
+name: Backup FreePBX database
+
+# Runs mysqldump FROM the Asterisk server, not from the GitHub runner — the DB firewall
+# (documentation/09-datahub-production-deployment.md, Step 1) only allows connections from
+# the Asterisk server's private IP, which a GitHub-hosted runner doesn't have.
+
+on:
+  schedule:
+    - cron: '0 20 * * *'  # 20:00 UTC — adjust to a low-traffic window for your tenants' timezone
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump asterisk + asteriskcdrdb from the DataHub Asterisk server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 15m
+          envs: DB_HOST,DB_BACKUP_USER,DB_BACKUP_PASS
+          script: |
+            set -euo pipefail
+            BACKUP_DIR=/var/backups/freepbx-db
+            mkdir -p "$BACKUP_DIR"
+            DATE=$(date +%Y-%m-%d)
+
+            mysqldump -h "$DB_HOST" -u "$DB_BACKUP_USER" -p"$DB_BACKUP_PASS" asterisk \
+              | gzip > "$BACKUP_DIR/asterisk-$DATE.sql.gz"
+            mysqldump -h "$DB_HOST" -u "$DB_BACKUP_USER" -p"$DB_BACKUP_PASS" asteriskcdrdb \
+              | gzip > "$BACKUP_DIR/asteriskcdrdb-$DATE.sql.gz"
+
+            # Keep 14 days locally. Consider shipping these to object storage (e.g. the MinIO
+            # instance FinalLamaErp already runs) once this is proven out — see
+            # documentation/09-datahub-production-deployment.md.
+            find "$BACKUP_DIR" -name "*.sql.gz" -mtime +14 -delete
+
+            echo "Backed up asterisk + asteriskcdrdb for $DATE"
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_BACKUP_USER: ${{ secrets.DB_BACKUP_USER }}
+          DB_BACKUP_PASS: ${{ secrets.DB_BACKUP_PASS }}

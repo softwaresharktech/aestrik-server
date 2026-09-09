@@ -1,0 +1,64 @@
+
+volumes:
+  mysql_data:
+  var_data:
+  etc_data:
+
+networks:
+  defaultnet:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/16
+          gateway: 172.30.0.1
+
+secrets:
+  mysql_root_password:
+    file: mysql_root_password.txt
+  freepbxuser_password:
+    file: freepbxuser_password.txt
+  postfix_sasl_passwd:
+    file: sasl_passwd.txt   # placeholder - not a real SMTP relay, only needed because the image mounts it
+
+services:
+  db:
+    container_name: freepbx-db
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_USER: freepbxuser
+      MYSQL_PASSWORD_FILE: /run/secrets/freepbxuser_password
+    secrets:
+      - mysql_root_password
+      - freepbxuser_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./my.cnf:/etc/mysql/my.cnf:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      defaultnet:
+        ipv4_address: 172.30.0.10
+
+  freepbx:
+    container_name: freepbx-app
+    image: escomputers/freepbx:17-nofail2ban
+    restart: unless-stopped
+    volumes:
+      - var_data:/var
+      - etc_data:/etc
+    networks:
+      defaultnet:
+        ipv4_address: 172.30.0.20
+    ports:
+      # Bound to localhost only - this is a local exploration environment, not internet-facing.
+      - "127.0.0.1:80:80/tcp"      # FreePBX admin UI -> http://localhost/admin
+      - "127.0.0.1:443:443/tcp"    # FreePBX admin UI over HTTPS (self-signed until you add a cert)
+      - "127.0.0.1:5060:5060/udp"  # SIP signaling (no RTP range published - see README)
+      - "127.0.0.1:5038:5038/tcp"  # AMI - enable + bind 0.0.0.0 from inside the GUI first
+      - "127.0.0.1:8088:8088/tcp"  # ARI - enable + bind 0.0.0.0 from inside the GUI first
+    secrets:
+      - postfix_sasl_passwd
+    depends_on:
+      - db

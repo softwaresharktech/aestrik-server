@@ -1,0 +1,18 @@
+# Asterisk × LamaERP Documentation
+
+Plan for standing up [Asterisk](https://www.asterisk.org/) (with [FreePBX](https://www.asterisk.org/asteriskexchange/freepbx/) as the admin UI) on a new server in DataHub, and connecting it to the [LamaERP](../../FinalLamaErp) application via its call-control APIs. Read in order:
+
+1. [00-overview.md](00-overview.md) — what Asterisk/FreePBX are, why LamaERP needs voice, architecture at a glance
+2. [01-server-provisioning.md](01-server-provisioning.md) — sizing, network, firewall for the new DataHub server
+3. [02-asterisk-freepbx-installation.md](02-asterisk-freepbx-installation.md) — installing Asterisk + FreePBX, enabling AMI/ARI
+4. [03-freepbx-configuration.md](03-freepbx-configuration.md) — trunks, extensions, IVR, multi-tenant mapping
+5. [04-asterisk-apis-ami-ari.md](04-asterisk-apis-ami-ari.md) — AMI vs ARI, auth, example call flows
+6. [05-erp-integration.md](05-erp-integration.md) — the proposed `LamaERP.Platform.Telephony` module
+7. [06-security-hardening.md](06-security-hardening.md) — toll-fraud prevention, secrets, network isolation, recording compliance
+8. [07-rollout-checklist.md](07-rollout-checklist.md) — phased go-live plan
+9. [08-open-source-vs-paid-comparison.md](08-open-source-vs-paid-comparison.md) — open-source core vs paid FreePBX modules vs CPaaS (Twilio/Vonage/Plivo) vs hosted PBX, with Nepal-specific cost numbers
+10. [09-datahub-production-deployment.md](09-datahub-production-deployment.md) — the separate DataHub DB service, the bootstrap script, and the GitHub Actions CI/CD that actually ships this to production
+
+**Status**: documentation/planning only — no server has been provisioned and no ERP code has been written yet. SIP trunk provider, exact server specs, and final module naming are open decisions flagged inline where they occur.
+
+**Want to click through the real thing first?** [../local-dev](../local-dev) runs an actual FreePBX + Asterisk install locally in Docker — the genuine admin GUI at `http://localhost/admin`, not a mockup. See [../local-dev/README.md](../local-dev/README.md).

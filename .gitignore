@@ -1,0 +1,6 @@
+# Filled-in production values — the .example file is the template that's tracked.
+.env.production
+
+# Local-dev secrets — generated fresh by whoever runs it (see local-dev/README.md).
+local-dev/*.txt
+local-dev/data/
