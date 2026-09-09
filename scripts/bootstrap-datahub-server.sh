@@ -103,6 +103,23 @@ ASTERISK_VERSION="${ASTERISK_VERSION:-22-current}"
 FREEPBX_TARBALL="${FREEPBX_TARBALL:-http://mirror.freepbx.org/modules/packages/freepbx/freepbx-17.0-latest.tgz}"
 PHP_VERSION="${PHP_VERSION:-8.3}"
 
+# --check-env: print the fully resolved config and exit, without touching the system. Run this
+# after editing .env.production to catch a parsing/typo issue in seconds instead of finding out
+# after a 20-40 minute Asterisk compile.
+if [[ "${1:-}" == "--check-env" ]]; then
+  echo "ERP_BACKEND_IP=$ERP_BACKEND_IP"
+  echo "ADMIN_SSH_CIDR=$ADMIN_SSH_CIDR"
+  echo "DB_HOST=$DB_HOST"
+  echo "DB_USER=$DB_USER"
+  echo "DB_NAME=$DB_NAME"
+  echo "DB_PASS=<redacted, ${#DB_PASS} characters>"
+  echo "TRUNK_PROVIDER_CIDR=$TRUNK_PROVIDER_CIDR"
+  echo "ASTERISK_VERSION=$ASTERISK_VERSION"
+  echo "PHP_VERSION=$PHP_VERSION"
+  echo "FREEPBX_TARBALL=$FREEPBX_TARBALL"
+  exit 0
+fi
+
 if [[ "$TRUNK_PROVIDER_CIDR" == "0.0.0.0/0" ]]; then
   echo "WARNING: TRUNK_PROVIDER_CIDR not set — SIP (5060/udp) will be open to the internet." >&2
   echo "         Set it to your trunk provider's actual signaling IP range as soon as you have it." >&2
