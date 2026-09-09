@@ -192,8 +192,11 @@ groupadd -f asterisk
 id -u asterisk &>/dev/null || useradd -r -d /var/lib/asterisk -g asterisk asterisk
 usermod -aG audio,dialout asterisk
 chown -R asterisk:asterisk /etc/asterisk /var/lib/asterisk /var/log/asterisk /var/spool/asterisk
-sed -i 's|;runuser.*|runuser = "asterisk"|' /etc/asterisk/asterisk.conf
-sed -i 's|;rungroup.*|rungroup = "asterisk"|' /etc/asterisk/asterisk.conf
+# No quotes around the value — asterisk.conf's parser takes it verbatim, and a quoted value
+# here makes Asterisk look up a group literally named '"asterisk"' (with the quote characters
+# included), which doesn't exist. Confirmed by the actual startup error this produced.
+sed -i 's|;runuser.*|runuser = asterisk|' /etc/asterisk/asterisk.conf
+sed -i 's|;rungroup.*|rungroup = asterisk|' /etc/asterisk/asterisk.conf
 systemctl enable --now asterisk
 
 # ── 5. Apache + PHP tuning for FreePBX ────────────────────────────────────────────────────
