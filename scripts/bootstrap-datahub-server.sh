@@ -64,6 +64,13 @@ trim() {
   local s="$1"
   s="${s#"${s%%[![:space:]]*}"}"
   s="${s%"${s##*[![:space:]]}"}"
+  # Strip one matching pair of surrounding quotes, if present — a .env file doesn't need them
+  # (unlike pasting a value inline on a command line), but writing ADMIN_SSH_CIDR="1.2.3.4/32"
+  # out of shell habit is a reasonable enough mistake that this should just tolerate it,
+  # the way virtually every other dotenv parser does.
+  if [[ ( "$s" == \"*\" && "$s" == *\" ) || ( "$s" == \'*\' && "$s" == *\' ) ]]; then
+    s="${s:1:-1}"
+  fi
   printf '%s' "$s"
 }
 
