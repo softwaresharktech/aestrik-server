@@ -11,7 +11,22 @@
 # provisioned in Step 1, using the same --dbhost mechanism already proven to work end-to-end
 # in local-dev/ (escomputers/freepbx-docker uses the identical installer under the hood).
 #
-# Target: Debian 13 (bookworm+) or Ubuntu 24.04 LTS, per documentation/01. Run as root.
+# Target: Ubuntu 24.04 LTS — the confirmed pick on DataHub/YetiApp Cloud's Jelastic panel
+# (Debian 13/trixie works too, per documentation/01, but isn't what's actually offered there).
+# Run as root.
+#
+# PHP note: Ubuntu 24.04's default archive ships PHP 8.3, not 8.2 — this script installs
+# whatever PHP_VERSION says (default 8.3) rather than hardcoding 8.2. local-dev/ is validated
+# against FreePBX 17 on PHP 8.2 specifically (see its Dockerfile base, debian:bookworm-slim =
+# Debian 12); PHP 8.3 is what FreePBX 17's own officially-supported Debian 13/Ubuntu 24.04
+# installer path relies on (documentation/02), so it's expected to work, just not something
+# this project has clicked through locally the way the PHP 8.2 path has. Worth a smoke test
+# after first install before treating it as fully proven.
+#
+# Config source: values can come from a filled-in .env.production at the repo root (copy
+# .env.production.example to it — see documentation/09), or be passed inline as a prefix to
+# this command, or both — anything already exported in the shell wins over the file, so an
+# inline value overrides what's in .env.production without editing it.
 #
 # Required environment variables:
 #   ERP_BACKEND_IP     Private IP of the LamaERP backend — the only host allowed to reach AMI/ARI
@@ -26,12 +41,32 @@
 #                        is known (documentation/01-server-provisioning.md).
 #   ASTERISK_VERSION     Default: 22-current (Asterisk 22 LTS, per documentation/02)
 #   FREEPBX_TARBALL      Default: http://mirror.freepbx.org/modules/packages/freepbx/freepbx-17.0-latest.tgz
+#   PHP_VERSION           Default: 8.3 (Ubuntu 24.04's default archive version)
 
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
   echo "ERROR: run as root (sudo)." >&2
   exit 1
+fi
+
+# Load .env.production from the repo root if present (copy .env.production.example to it and
+# fill in real values — see documentation/09-datahub-production-deployment.md). Anything already
+# exported in the shell (e.g. a one-off DB_PASS=... prefix) takes precedence over the file, so
+# this is safe to combine with inline overrides. ENV_FILE lets you point at a different path.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/../.env.production}"
+if [[ -f "$ENV_FILE" ]]; then
+  echo "Loading $ENV_FILE"
+  while IFS='=' read -r key value; do
+    key="$(echo "$key" | xargs)"
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    value="$(echo "$value" | xargs)"
+    # Don't clobber a value already set in the environment (inline override wins).
+    if [[ -z "${!key:-}" ]]; then
+      export "$key=$value"
+    fi
+  done < "$ENV_FILE"
 fi
 
 : "${ERP_BACKEND_IP:?Set ERP_BACKEND_IP (private IP of the LamaERP backend)}"
@@ -44,6 +79,7 @@ DB_NAME="${DB_NAME:-asterisk}"
 TRUNK_PROVIDER_CIDR="${TRUNK_PROVIDER_CIDR:-0.0.0.0/0}"
 ASTERISK_VERSION="${ASTERISK_VERSION:-22-current}"
 FREEPBX_TARBALL="${FREEPBX_TARBALL:-http://mirror.freepbx.org/modules/packages/freepbx/freepbx-17.0-latest.tgz}"
+PHP_VERSION="${PHP_VERSION:-8.3}"
 
 if [[ "$TRUNK_PROVIDER_CIDR" == "0.0.0.0/0" ]]; then
   echo "WARNING: TRUNK_PROVIDER_CIDR not set — SIP (5060/udp) will be open to the internet." >&2
@@ -80,8 +116,9 @@ apt-get -y install \
   subversion libsqlite3-dev libjansson-dev libxml2-dev uuid uuid-dev default-libmysqlclient-dev \
   lame ffmpeg mpg123 expect \
   apache2 mariadb-client \
-  php8.2 php8.2-curl php8.2-cli php8.2-common php8.2-mysql php8.2-gd php8.2-mbstring \
-  php8.2-intl php8.2-xml php-pear php-soap \
+  "php${PHP_VERSION}" "php${PHP_VERSION}-curl" "php${PHP_VERSION}-cli" "php${PHP_VERSION}-common" \
+  "php${PHP_VERSION}-mysql" "php${PHP_VERSION}-gd" "php${PHP_VERSION}-mbstring" \
+  "php${PHP_VERSION}-intl" "php${PHP_VERSION}-xml" php-pear php-soap \
   sox sqlite3 automake libtool autoconf unixodbc-dev \
   libasound2-dev libogg-dev libvorbis-dev libicu-dev libcurl4-openssl-dev \
   odbc-mariadb unixodbc libical-dev libneon27-dev libsrtp2-dev libspandsp-dev libtool-bin \
@@ -112,8 +149,8 @@ sed -i 's|;rungroup.*|rungroup = "asterisk"|' /etc/asterisk/asterisk.conf
 systemctl enable --now asterisk
 
 # ── 5. Apache + PHP tuning for FreePBX ────────────────────────────────────────────────────
-sed -i 's/\(^upload_max_filesize = \).*/\120M/' /etc/php/8.2/apache2/php.ini
-sed -i 's/\(^memory_limit = \).*/\1256M/' /etc/php/8.2/apache2/php.ini
+sed -i 's/\(^upload_max_filesize = \).*/\120M/' "/etc/php/${PHP_VERSION}/apache2/php.ini"
+sed -i 's/\(^memory_limit = \).*/\1256M/' "/etc/php/${PHP_VERSION}/apache2/php.ini"
 sed -i 's/^\(User\|Group\).*/\1 asterisk/' /etc/apache2/apache2.conf
 sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 a2enmod rewrite

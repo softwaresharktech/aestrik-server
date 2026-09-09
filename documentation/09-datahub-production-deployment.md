@@ -42,27 +42,45 @@ Same shape as FinalLamaErp's `POSTGRES_HOST=10.121.6.217` externalized Postgres 
 
 ## Step 1 — Provision the separate MariaDB service
 
-Two ways to do this in DataHub, in order of preference:
+DataHub has a managed MySQL/MariaDB DBaaS — use it. Mirrors exactly how FinalLamaErp's Postgres runs as a managed Azure Container App (`infra/postgres.yaml`) rather than a container in `docker-compose.prod.yml`; DataHub handles patching/backups of the DB engine itself, same division of responsibility.
 
-1. **DataHub's managed MySQL/MariaDB offering**, if it has one — mirrors exactly how FinalLamaErp's Postgres runs as a managed Azure Container App (`infra/postgres.yaml`) rather than a container in `docker-compose.prod.yml`. Least operational burden — DataHub handles patching/backups of the DB engine itself.
-2. **A small, dedicated VM running MariaDB natively** (`apt install mariadb-server`, not Docker — consistent with the same host-networking-avoidance reasoning as Asterisk itself, and it keeps the DB off the Asterisk box so a PBX issue can't take the database down with it). 1 vCPU / 1–2GB RAM is plenty for FreePBX's own DB load.
+**"DataHub" turns out to be a Jelastic-based panel on YetiApp Cloud** — the same host `FinalLamaErp`'s `deploy.yml` already targets (`*.ktm.yetiappcloud.com` matches). That means DB↔app private networking here works exactly the way it already does for LamaERP's Postgres, and the "SQL Databases" node type in the topology editor is the thing to add.
 
-Either way, apply the same firewall discipline as [01-server-provisioning.md](01-server-provisioning.md): **the DB's port 3306 is reachable only from the Asterisk app server's private IP**, never public, never a wildcard.
+Concrete picks:
+
+- **Engine: MariaDB**, not MySQL, if the console offers a choice — FreePBX/Asterisk are developed and tested primarily against MariaDB, and it's what `local-dev/` already runs.
+- **Version: MariaDB `10.xx` → 10.11**, not the panel's `12.3.3` default. Jelastic's version picker offers 12.xx/11.xx/10.xx — 12.x is very new (MariaDB's newest line) and FreePBX has a track record of subtle breakage on newer MariaDB releases (stricter SQL modes, changed defaults) that take time to shake out. 10.11 matches `local-dev/docker-compose.yml` exactly, so nothing behaves differently between what's already been clicked through locally and production. If something more current than 10.11 is wanted, `11.xx` → 11.4 LTS is the next-safest step; skip 12.x until FreePBX compatibility on it is better established.
+- **Sizing: start small.** FreePBX's own DB load is config/CDR rows, not big data — Jelastic's default reserved tier (around 4 cloudlets, ~512MiB/1.6GHz) is already in the right range, the same ballpark as FinalLamaErp's Postgres container app (0.5 vCPU/1GB). Scale up only if CDR volume from voice campaigns actually grows into it.
+- **Horizontal scaling: leave it at 1 node.** No Galera clustering needed for this workload — it's pure added cost/complexity.
+- **Public IPv4: 0.** Keep it at zero — this is the private-networking requirement that actually matters. Apply the same firewall discipline as [01-server-provisioning.md](01-server-provisioning.md): **the DB's port 3306 is reachable only from the Asterisk app server's private IP**, never public, never a wildcard.
+
+(If DataHub's DBaaS ever turns out to be Postgres-only, or there's no managed DB product at all, the fallback is a small dedicated VM running MariaDB natively — `apt install mariadb-server`, not Docker, consistent with the same host-networking-avoidance reasoning as Asterisk itself. Not needed here since the managed option exists.)
 
 Once it exists, run [scripts/configure-external-db.sql](../../scripts/configure-external-db.sql) against it once (`mysql -h <db-host> -u root -p < configure-external-db.sql`) to create the `asterisk` and `asteriskcdrdb` databases and a `freepbxuser` scoped to only the Asterisk server's IP — tighter than `local-dev/init.sql`'s wildcard grant, which is fine for a localhost-only dev container but wrong for production.
 
 ## Step 2 — Bootstrap the Asterisk server
 
-[scripts/bootstrap-datahub-server.sh](../../scripts/bootstrap-datahub-server.sh) consolidates [01](01-server-provisioning.md), [02](02-asterisk-freepbx-installation.md), and [06](06-security-hardening.md) into one script instead of a manual walkthrough: base packages, NTP, UFW firewall rules scoped to the ERP backend's IP, the FreePBX 17 installer, and AMI/ARI user provisioning with generated secrets. Run it once, by hand, over SSH on the freshly provisioned box:
+[scripts/bootstrap-datahub-server.sh](../../scripts/bootstrap-datahub-server.sh) consolidates [01](01-server-provisioning.md), [02](02-asterisk-freepbx-installation.md), and [06](06-security-hardening.md) into one script instead of a manual walkthrough: base packages, NTP, UFW firewall rules scoped to the ERP backend's IP, the FreePBX 17 installer, and AMI/ARI user provisioning with generated secrets.
+
+**Node OS: Ubuntu 24.04 LTS.** Jelastic's compute-node picker offers Debian only as an unexpanded submenu, but lists Ubuntu 24.04/22.04/20.04/18.04 directly — 24.04 is exactly the pairing [01-server-provisioning.md](01-server-provisioning.md) already recommends (LTS through 2029, officially supported by FreePBX 17/Asterisk 22), so there's no reason to dig for a Debian option. One consequence: Ubuntu 24.04's default archive ships **PHP 8.3**, not the PHP 8.2 that `local-dev/`'s Docker image (based on Debian 12) is validated against. The bootstrap script installs whichever `PHP_VERSION` says (default 8.3) rather than hardcoding 8.2 — expected to work, since FreePBX 17's own officially-supported Ubuntu 24.04 installer path relies on PHP 8.3 too, but it's a small delta from what's actually been clicked through locally. Worth a smoke test of the FreePBX install specifically after first bootstrap.
+
+Run it once, by hand, over SSH on the freshly provisioned box. Cloning the repo there first (rather than just `scp`-ing the one script) also satisfies Step 3's prerequisite for `deploy-asterisk-config.yml`, so it's worth doing even though the script alone doesn't strictly need it:
 
 ```bash
-scp scripts/bootstrap-datahub-server.sh you@datahub-asterisk-server:/tmp/
 ssh you@datahub-asterisk-server
-sudo ERP_BACKEND_IP=10.x.x.x ADMIN_SSH_CIDR=10.x.x.x/32 DB_HOST=<mariadb-private-ip> DB_PASS='<freepbxuser password from step 1>' \
-  bash /tmp/bootstrap-datahub-server.sh
+apt update && apt install -y git
+git clone https://github.com/<owner>/<repo>.git /opt/lamaerp/asterisk
+cd /opt/lamaerp/asterisk
+
+cp .env.production.example .env.production
+nano .env.production   # fill in ERP_BACKEND_IP, ADMIN_SSH_CIDR, DB_HOST, DB_USER, DB_PASS
+
+bash scripts/bootstrap-datahub-server.sh
 ```
 
-It prints the generated AMI/ARI secrets at the end — put those straight into the server's `.env` (step 4) and the ERP's own secrets store; they're shown once and not logged to a file.
+The script reads `.env.production` automatically (no flag needed) — see the note at the top of [scripts/bootstrap-datahub-server.sh](../../scripts/bootstrap-datahub-server.sh). Anything also passed inline (`DB_PASS=... bash scripts/bootstrap-datahub-server.sh`) overrides the file, so it's fine to keep most values in `.env.production` and override one-off on the command line when needed.
+
+It prints the generated AMI/ARI secrets at the end — put those straight into `.env.production` and the ERP's own secrets store; they're shown once and not logged to a file.
 
 This step is **not** what CI/CD automates — it's a one-time (or rare, deliberate re-run) provisioning action against a specific box, the same way nobody has FinalLamaErp's CI re-provision the DataHub VM on every push. CI/CD picks up after this.
 
