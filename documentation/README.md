@@ -15,7 +15,8 @@ Plan for standing up [Asterisk](https://www.asterisk.org/) (with [FreePBX](https
 11. [10-yetiappcloud-install-log.md](10-yetiappcloud-install-log.md) — **as-built log** of the real install on YetiApp Cloud: every wrong turn, the fix for each, and Jelastic-specific gotchas. Updated as the install progresses.
 12. [11-deferred-steps.md](11-deferred-steps.md) — **TODO / deferred steps**: everything skipped, stubbed, or temporarily loosened during the install, grouped by area with checkboxes.
 13. [12-linphone-extension-setup.md](12-linphone-extension-setup.md) — connecting a roaming softphone (Linphone) to an extension: fail2ban, TLS/SRTP transport, Jelastic firewall rules, client config, testing
+14. [odoo/voip-research.md](odoo/voip-research.md) — how Odoo's VoIP ("Phone") module works, how a tenant sets it up, and how this PBX could offer LamaERP tenants the same in-browser calling experience
 
-**Status**: install in progress on YetiApp Cloud — Asterisk + FreePBX are installed and running; the admin UI is not yet reachable from outside. See [10-yetiappcloud-install-log.md](10-yetiappcloud-install-log.md) for the live state and remaining steps.
+**Status**: core install done on YetiApp Cloud — Asterisk + FreePBX running, admin UI live at `https://sainowine.com.np/admin` with a valid cert, a roaming softphone extension tested end-to-end over TLS/SRTP. Remaining work (AMI/ARI provisioning, hardening, SIP trunk, ERP integration) tracked in [11-deferred-steps.md](11-deferred-steps.md).
 
 **Want to click through the real thing first?** [../local-dev](../local-dev) runs an actual FreePBX + Asterisk install locally in Docker — the genuine admin GUI at `http://localhost/admin`, not a mockup. See [../local-dev/README.md](../local-dev/README.md).
