@@ -12,7 +12,8 @@ Plan for standing up [Asterisk](https://www.asterisk.org/) (with [FreePBX](https
 8. [07-rollout-checklist.md](07-rollout-checklist.md) — phased go-live plan
 9. [08-open-source-vs-paid-comparison.md](08-open-source-vs-paid-comparison.md) — open-source core vs paid FreePBX modules vs CPaaS (Twilio/Vonage/Plivo) vs hosted PBX, with Nepal-specific cost numbers
 10. [09-datahub-production-deployment.md](09-datahub-production-deployment.md) — the separate DataHub DB service, the bootstrap script, and the GitHub Actions CI/CD that actually ships this to production
+11. [10-yetiappcloud-install-log.md](10-yetiappcloud-install-log.md) — **as-built log** of the real install on YetiApp Cloud: every wrong turn, the fix for each, and Jelastic-specific gotchas. Updated as the install progresses.
 
-**Status**: documentation/planning only — no server has been provisioned and no ERP code has been written yet. SIP trunk provider, exact server specs, and final module naming are open decisions flagged inline where they occur.
+**Status**: install in progress on YetiApp Cloud — Asterisk + FreePBX are installed and running; the admin UI is not yet reachable from outside. See [10-yetiappcloud-install-log.md](10-yetiappcloud-install-log.md) for the live state and remaining steps.
 
 **Want to click through the real thing first?** [../local-dev](../local-dev) runs an actual FreePBX + Asterisk install locally in Docker — the genuine admin GUI at `http://localhost/admin`, not a mockup. See [../local-dev/README.md](../local-dev/README.md).
