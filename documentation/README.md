@@ -14,6 +14,7 @@ Plan for standing up [Asterisk](https://www.asterisk.org/) (with [FreePBX](https
 10. [09-datahub-production-deployment.md](09-datahub-production-deployment.md) — the separate DataHub DB service, the bootstrap script, and the GitHub Actions CI/CD that actually ships this to production
 11. [10-yetiappcloud-install-log.md](10-yetiappcloud-install-log.md) — **as-built log** of the real install on YetiApp Cloud: every wrong turn, the fix for each, and Jelastic-specific gotchas. Updated as the install progresses.
 12. [11-deferred-steps.md](11-deferred-steps.md) — **TODO / deferred steps**: everything skipped, stubbed, or temporarily loosened during the install, grouped by area with checkboxes.
+13. [12-linphone-extension-setup.md](12-linphone-extension-setup.md) — connecting a roaming softphone (Linphone) to an extension: fail2ban, TLS/SRTP transport, Jelastic firewall rules, client config, testing
 
 **Status**: install in progress on YetiApp Cloud — Asterisk + FreePBX are installed and running; the admin UI is not yet reachable from outside. See [10-yetiappcloud-install-log.md](10-yetiappcloud-install-log.md) for the live state and remaining steps.
 
