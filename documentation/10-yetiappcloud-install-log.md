@@ -2,7 +2,7 @@
 
 A running as-built record of installing Asterisk 22 + FreePBX 17 on YetiApp Cloud (a Jelastic-based PaaS), including every wrong turn and the fix for it. This is the "what actually happened" companion to the clean plan in [09-datahub-production-deployment.md](09-datahub-production-deployment.md) — kept separately because the detours are worth remembering.
 
-**Status: in progress.** FreePBX is installed and running; the admin UI is now reachable at `http://103.90.84.156/admin/`. First-run wizard + TLS still to do. Full remaining list in [11-deferred-steps.md](11-deferred-steps.md).
+**Status: in progress.** FreePBX is installed, running, and reachable at **`https://sainowine.com.np/admin`** with a valid Let's Encrypt cert. First-run wizard done. Telephony config, AMI/ARI, security hardening still to do — see [11-deferred-steps.md](11-deferred-steps.md).
 
 ---
 
@@ -95,7 +95,13 @@ After that, `./install -n` completed: **"You have successfully installed FreePBX
 - The shared-load-balancer path (`env-7970601.ktm.yetiappcloud.com`) turned out **not to apply** — that URL returns "non-existing environment" because a bare "Elastic VPS" node type doesn't create a web entry point (no LB node, no "Open in Browser" button). The Custom Domains form is only for the shared-LB case.
 - **Root cause:** the "Elastic VPS" node's Jelastic firewall (dashboard → Firewall → Inbound Rules) shipped with only FTP(21)/SSH(22)/SMTP(25) allowed, then Deny-All at priority 65535 — **no rule for 80/443**. (The managed "SQL Databases" node came pre-loaded with HTTP/HTTPS rules; the VPS node didn't.)
 - **Fix:** added inbound rules on the VPS node — `Allow HTTP` (TCP 80, `0.0.0.0/0`, priority 1030) and `Allow HTTPS` (TCP 443, `0.0.0.0/0`, priority 1040). `http://103.90.84.156/admin/` then loaded immediately.
-- `sainowine.com.np` over `https` fails with connection-refused (no 443 listener / no cert yet — TLS still to do). `http://sainowine.com.np` gets auto-upgraded to `https` by the browser (Chrome HTTPS-upgrade) — not a server-side redirect (confirmed: `curl -H "Host: sainowine.com.np" http://localhost/.well-known/...` → 404, plain HTTP). Use the IP for the first-run wizard, then issue the cert.
+- `sainowine.com.np` over `https` initially failed with connection-refused (no 443 listener / no cert yet). First-run wizard was done via `http://103.90.84.156/admin/`.
+
+### 7. TLS — done
+
+- FreePBX → Certificate Manager → **New Let's Encrypt Certificate**: host `sainowine.com.np`, challenge over HTTP (port 80). Validated and issued first try — port 80 was open to `0.0.0.0/0` and serving plain HTTP with no redirect, so HTTP-01 worked with no extra config.
+- Set as the **Default Certificate**; Apache picked up 443.
+- `https://sainowine.com.np/admin` **works.** The earlier "broken http→https redirect" was just **browser cache** — a fresh incognito window loaded it fine. Not a server-side issue.
 
 ---
 
@@ -122,13 +128,8 @@ Reusable lessons, independent of this project:
 - Databases `asterisk` + `asteriskcdrdb` created
 - `fwconsole reload` / `restart` clean
 - Jelastic firewall inbound rules added on the VPS node: HTTP 80, HTTPS 443 (`0.0.0.0/0`)
-- **Admin UI reachable: `http://103.90.84.156/admin/`**
 - `sainowine.com.np` A record → `103.90.84.156` (Cloudflare, DNS-only)
+- **FreePBX first-run wizard done; admin UI live at `https://sainowine.com.np/admin` with a Let's Encrypt cert (set as Default Certificate)**
 - `ufw` on the node: 22 (admin IP), 5060/udp, 10000-20000/udp, 5038 + 8089 (ERP backend IP), plus blanket 80/443 (loosened during debugging — see [11-deferred-steps.md](11-deferred-steps.md) §C)
-
-**Immediate next:**
-- [ ] FreePBX first-run wizard (create admin account) — via `http://103.90.84.156/admin/`
-- [ ] Let's Encrypt cert for `sainowine.com.np` (FreePBX Certificate Manager; port 80 open + serving plain HTTP, so HTTP-01 will validate)
-- [ ] Force HTTPS in FreePBX once the cert is set; then `https://sainowine.com.np/admin` works
 
 **Everything else deferred:** see [11-deferred-steps.md](11-deferred-steps.md) — AMI/ARI provisioning, fail2ban, `DB_PASS` rotation, grant tightening, `ufw` cleanup, SIP trunk, FreePBX config, doc/script updates, CI/CD secrets.

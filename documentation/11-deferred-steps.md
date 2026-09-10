@@ -39,10 +39,10 @@ The bare "Elastic VPS" node type ships with only FTP/SSH/SMTP inbound rules + de
 - [ ] **Clean up leftover DB objects.** `asterisk` was originally created, renamed to `asteriskcdrdb`, then a fresh `asterisk` was made — there may be a stray renamed/empty database. Also verify no leftover `freepbxuser@10.121.1.17` / `@10.121.1.%` / `@10.121.%.%` grants remain from the failed attempts (`SELECT User, Host FROM mysql.user;`).
 - [ ] Confirm `.env.production` on the server has `DB_HOST=10.121.5.221` (the internal IP), not the public hostname.
 
-## E. FreePBX post-install configuration (all via the GUI, none done)
+## E. FreePBX post-install configuration (via the GUI)
 
-- [ ] **First-run wizard** — create the admin account. Nothing else can be configured until this is done.
-- [ ] **TLS cert for `sainowine.com.np`** — Certificate Manager module (Let's Encrypt, needs port 80 reachable), or Jelastic's own SSL. Then set it as the admin UI cert and force HTTPS.
+- [x] **First-run wizard** — admin account created.
+- [x] **TLS cert for `sainowine.com.np`** — Let's Encrypt via Certificate Manager, HTTP-01, set as Default Certificate. `https://sainowine.com.np/admin` live. (Auto-renews ~every 2 months per FreePBX — don't add a separate renewer.)
 - [ ] **SIP trunk** — provider not chosen (business decision, open since [09](09-datahub-production-deployment.md) Phase 0). Blocks all real inbound/outbound calling.
 - [ ] **Extensions / inbound + outbound routes / IVR** — per [03-freepbx-configuration.md](03-freepbx-configuration.md). Not started.
 - [ ] **`TRUNK_PROVIDER_CIDR`** in `.env.production` is commented out — SIP left unscoped by default. Set it to the provider's real range once known.
