@@ -2,7 +2,7 @@
 
 A running as-built record of installing Asterisk 22 + FreePBX 17 on YetiApp Cloud (a Jelastic-based PaaS), including every wrong turn and the fix for it. This is the "what actually happened" companion to the clean plan in [09-datahub-production-deployment.md](09-datahub-production-deployment.md) — kept separately because the detours are worth remembering.
 
-**Status: in progress.** FreePBX is installed and running; the admin UI is not yet reachable from outside. See [Current state](#current-state) at the bottom.
+**Status: in progress.** FreePBX is installed and running; the admin UI is now reachable at `http://103.90.84.156/admin/`. First-run wizard + TLS still to do. Full remaining list in [11-deferred-steps.md](11-deferred-steps.md).
 
 ---
 
@@ -92,7 +92,10 @@ After that, `./install -n` completed: **"You have successfully installed FreePBX
 - `ss -tlnp` → Apache is listening on `0.0.0.0:80`. ARI is listening on `*:8089`. AMI (5038) not yet listening (not provisioned).
 - `curl -sI http://103.90.84.156/admin/` **from the node itself** → `302 Found`. Service and local routing are fine.
 - Conclusion: inbound 80/443 is being dropped at **Jelastic's network layer** — same class of problem as the database. `ufw` is not the constraint.
-- **Current direction:** stop fighting the dedicated-public-IP + node-firewall path. Use Jelastic's **shared load balancer** (`env-7970601.ktm.yetiappcloud.com`) + **Custom Domains** binding for `sainowine.com.np` instead. The SLB proxies HTTP/HTTPS to the node without needing node firewall rules. AMI/ARI stay **internal-only** (node-to-node over the private network), which is the correct posture anyway.
+- The shared-load-balancer path (`env-7970601.ktm.yetiappcloud.com`) turned out **not to apply** — that URL returns "non-existing environment" because a bare "Elastic VPS" node type doesn't create a web entry point (no LB node, no "Open in Browser" button). The Custom Domains form is only for the shared-LB case.
+- **Root cause:** the "Elastic VPS" node's Jelastic firewall (dashboard → Firewall → Inbound Rules) shipped with only FTP(21)/SSH(22)/SMTP(25) allowed, then Deny-All at priority 65535 — **no rule for 80/443**. (The managed "SQL Databases" node came pre-loaded with HTTP/HTTPS rules; the VPS node didn't.)
+- **Fix:** added inbound rules on the VPS node — `Allow HTTP` (TCP 80, `0.0.0.0/0`, priority 1030) and `Allow HTTPS` (TCP 443, `0.0.0.0/0`, priority 1040). `http://103.90.84.156/admin/` then loaded immediately.
+- `sainowine.com.np` over `https` fails with connection-refused (no 443 listener / no cert yet — TLS still to do). `http://sainowine.com.np` gets auto-upgraded to `https` by the browser (Chrome HTTPS-upgrade) — not a server-side redirect (confirmed: `curl -H "Host: sainowine.com.np" http://localhost/.well-known/...` → 404, plain HTTP). Use the IP for the first-run wizard, then issue the cert.
 
 ---
 
@@ -102,8 +105,10 @@ Reusable lessons, independent of this project:
 
 1. **Connect to the managed DB via its internal IP, not the public `*.ktm.yetiappcloud.com` hostname.** The public hostname routes through a shared proxy that silently rejects connections it can't attribute — you get a MySQL "Access denied" that never appears in the DB's own logs. Use `hostname -i` on the DB node to get the internal IP.
 2. **Cloudlets scale RAM and CPU clock speed, not core count.** Nodes here are single-core regardless of how many cloudlets you assign. Plan compile times accordingly (`make -j1`).
-3. **Jelastic has its own network/firewall layer above the OS.** Both the DB block and the web-UI block were at this layer — opening `ufw`/`iptables` on the node does nothing for it. Inbound rules live in the Jelastic dashboard (node → Firewall → Inbound Rules), or you route through the environment's shared load balancer.
-4. **A node's public egress IP (`curl ifconfig.me`) is not proof of dedicated inbound routing.** It can be a shared NAT gateway. Confirm a dedicated Public IPv4 is actually attached in the dashboard, or use the SLB.
+3. **Jelastic has its own network/firewall layer above the OS.** Both the DB block and the web-UI block were at this layer — opening `ufw`/`iptables` on the node does nothing for it. Inbound rules live in the Jelastic dashboard (node → Firewall → Inbound Rules).
+4. **A bare "Elastic VPS" node ships with a minimal inbound ruleset** — FTP/SSH/SMTP only, then deny-all. Any other port you want reachable (80, 443, 5060, 5038, 8089…) needs an explicit inbound rule added. Managed stack nodes (like "SQL Databases") come with more open by default.
+5. **A raw VPS node has no shared load balancer / no `env-*.ktm.yetiappcloud.com` web entry point.** The Custom Domains form and "Open in Browser" don't apply. Expose web services via the node's public IP + inbound firewall rules, and point DNS straight at the IP with an A record.
+6. **A node's public egress IP (`curl ifconfig.me`) is not proof of dedicated inbound routing** on its own — but here it was fine; the block was purely the missing firewall rule.
 5. **The source IP of outbound connections from a node rotates** across a small internal pool (`10.121.1.16`/`.17` seen interchangeably). Don't scope DB grants to a single IP.
 6. **FreePBX's `./install -n` exits non-zero even on success.** Don't let `set -e` treat that as fatal.
 
@@ -115,18 +120,15 @@ Reusable lessons, independent of this project:
 - Asterisk 22.11.0 built + running as a service on `node26243`
 - FreePBX 17 installed against the external MariaDB (`DB_HOST=10.121.5.221`, `freepbxuser@'%'`)
 - Databases `asterisk` + `asteriskcdrdb` created
-- `fwconsole reload` / `restart` clean; web UI serving on `localhost:80`
-- `ufw` on the node: 22 (admin IP), 5060/udp, 10000-20000/udp, 5038 + 8089 (ERP backend IP), 80/443 (currently wide open for testing)
+- `fwconsole reload` / `restart` clean
+- Jelastic firewall inbound rules added on the VPS node: HTTP 80, HTTPS 443 (`0.0.0.0/0`)
+- **Admin UI reachable: `http://103.90.84.156/admin/`**
+- `sainowine.com.np` A record → `103.90.84.156` (Cloudflare, DNS-only)
+- `ufw` on the node: 22 (admin IP), 5060/udp, 10000-20000/udp, 5038 + 8089 (ERP backend IP), plus blanket 80/443 (loosened during debugging — see [11-deferred-steps.md](11-deferred-steps.md) §C)
 
-**Not done / remaining:**
-- [ ] Get the admin UI reachable from outside — via Jelastic SLB + Custom Domain (`sainowine.com.np`), in progress
-- [ ] FreePBX first-run wizard (create admin account)
-- [ ] TLS cert for `sainowine.com.np` (Jelastic Let's Encrypt add-on, or FreePBX Certificate Manager)
-- [ ] Re-tighten `ufw` 80/443 to real admin IPs once access works
-- [ ] AMI user provisioning (bootstrap script section 7 — didn't run; use FreePBX GUI or `manager_additional.conf`, avoid duplicate `[lamaerp]` blocks)
-- [ ] ARI user provisioning (section 8 — `http.conf` already `enabled`, ARI listening on 8089; still needs the `[lamaerp]` user)
-- [ ] fail2ban enable (section 9)
-- [ ] **Rotate `DB_PASS`** — currently a temporary placeholder set during troubleshooting (in `.env.production`, not recorded here). Update the MariaDB user password and `.env.production` together.
-- [ ] Tighten `freepbxuser@'%'` to the internal network range once the stable source-IP behaviour is understood
-- [ ] Point the ERP backend at AMI/ARI over the **internal** network, not public
-- [ ] Update `scripts/configure-external-db.sql` and doc 09 to use the internal IP + `%` (or internal-range) grant, per lessons above
+**Immediate next:**
+- [ ] FreePBX first-run wizard (create admin account) — via `http://103.90.84.156/admin/`
+- [ ] Let's Encrypt cert for `sainowine.com.np` (FreePBX Certificate Manager; port 80 open + serving plain HTTP, so HTTP-01 will validate)
+- [ ] Force HTTPS in FreePBX once the cert is set; then `https://sainowine.com.np/admin` works
+
+**Everything else deferred:** see [11-deferred-steps.md](11-deferred-steps.md) — AMI/ARI provisioning, fail2ban, `DB_PASS` rotation, grant tightening, `ufw` cleanup, SIP trunk, FreePBX config, doc/script updates, CI/CD secrets.
